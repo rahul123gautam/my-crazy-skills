@@ -116,11 +116,23 @@ jobs:
           # Extract GitHub markdown file URLs containing "skill" in the filename
           echo -e "$ISSUE_TEXT" | grep -oiE 'https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+/blob/[^ )]+skill[^ )]*\.md' > /tmp/markdown_urls.txt || true
 
-          # Avoid adding repo URLs that are only referenced via markdown file links
-          if [[ -s /tmp/markdown_urls.txt && -s /tmp/repos_urls.txt ]]; then
-            sed -E 's#(https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+).*#\\1#' /tmp/markdown_urls.txt | sort -u > /tmp/markdown_repos.txt
-            grep -vFf /tmp/markdown_repos.txt /tmp/repos_urls.txt > /tmp/repos_urls.filtered || true
-            mv /tmp/repos_urls.filtered /tmp/repos_urls.txt
+          # Extract GitHub tree URLs that point to a skill directory
+          echo -e "$ISSUE_TEXT" | grep -oiE 'https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+/tree/[^ )]+' > /tmp/tree_urls.txt || true
+
+          # Avoid adding repo URLs that are only referenced via markdown or tree links
+          if [[ -s /tmp/repos_urls.txt ]]; then
+            : > /tmp/skill_repos.txt
+            if [[ -s /tmp/markdown_urls.txt ]]; then
+              sed -E 's#(https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+).*#\\1#' /tmp/markdown_urls.txt | sort -u >> /tmp/skill_repos.txt
+            fi
+            if [[ -s /tmp/tree_urls.txt ]]; then
+              sed -E 's#(https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+).*#\\1#' /tmp/tree_urls.txt | sort -u >> /tmp/skill_repos.txt
+            fi
+            if [[ -s /tmp/skill_repos.txt ]]; then
+              sort -u /tmp/skill_repos.txt -o /tmp/skill_repos.txt
+              grep -vFf /tmp/skill_repos.txt /tmp/repos_urls.txt > /tmp/repos_urls.filtered || true
+              mv /tmp/repos_urls.filtered /tmp/repos_urls.txt
+            fi
           fi
 
           # Extract owner/repo shorthand and normalize into URLs
@@ -129,10 +141,13 @@ jobs:
             awk '{print "https://github.com/" $0}' /tmp/repos_slugs.txt >> /tmp/repos_urls.txt
           fi
 
-          if [[ -s /tmp/repos_urls.txt || -s /tmp/markdown_urls.txt ]]; then
+          if [[ -s /tmp/repos_urls.txt || -s /tmp/markdown_urls.txt || -s /tmp/tree_urls.txt ]]; then
             : > /tmp/repos.txt
             if [[ -s /tmp/markdown_urls.txt ]]; then
               sed -E 's#\\.git$##; s#/$##' /tmp/markdown_urls.txt | sort -u | sed 's#^#markdown::#' >> /tmp/repos.txt
+            fi
+            if [[ -s /tmp/tree_urls.txt ]]; then
+              sed -E 's#\\.git$##; s#/$##' /tmp/tree_urls.txt | sort -u | sed 's#^#tree::#' >> /tmp/repos.txt
             fi
             if [[ -s /tmp/repos_urls.txt ]]; then
               sed -E 's#\\.git$##; s#/$##' /tmp/repos_urls.txt | sort -u | sed 's#^#repo::#' >> /tmp/repos.txt
@@ -166,6 +181,7 @@ jobs:
               https://github.com/owner/repo
               owner/repo
               https://github.com/owner/repo/blob/main/path/skill.md
+              https://github.com/owner/repo/tree/main/path/to/skill-dir
               \`\`\`
               
               Your issue body was:
@@ -440,11 +456,17 @@ jobs:
             if [[ "$ITEM" == markdown::* ]]; then
               ITEM_TYPE="markdown"
               REPO_URL="${ITEM#markdown::}"
+            elif [[ "$ITEM" == tree::* ]]; then
+              ITEM_TYPE="tree"
+              REPO_URL="${ITEM#tree::}"
             elif [[ "$ITEM" == repo::* ]]; then
               ITEM_TYPE="repo"
               REPO_URL="${ITEM#repo::}"
             elif [[ "$ITEM" =~ /blob/ && "$ITEM" =~ \.md$ ]]; then
               ITEM_TYPE="markdown"
+              REPO_URL="$ITEM"
+            elif [[ "$ITEM" =~ /tree/ ]]; then
+              ITEM_TYPE="tree"
               REPO_URL="$ITEM"
             fi
 
@@ -464,10 +486,18 @@ jobs:
             RAW_URL=""
             FILENAME=""
 
-            if [[ "$ITEM_TYPE" == "markdown" ]]; then
-              RAW_URL=$(echo "$REPO_URL" | sed -E 's#https://github\.com/([^/]+/[^/]+)/blob/#https://raw.githubusercontent.com/\\1/#')
-              FILENAME=$(basename "$RAW_URL" | sed -E 's/\\?.*$//')
-              NAME_BASE=$(echo "$FILENAME" | sed -E 's/\\.[mM][dD]$//')
+            if [[ "$ITEM_TYPE" == "markdown" || "$ITEM_TYPE" == "tree" ]]; then
+              if [[ "$ITEM_TYPE" == "tree" ]]; then
+                CLEAN_URL=$(echo "$REPO_URL" | sed -E 's#/$##')
+                NAME_BASE=$(basename "$CLEAN_URL")
+                RAW_URL=$(echo "$CLEAN_URL" | sed -E 's#https://github\.com/([^/]+/[^/]+)/tree/([^/]+)/(.*)#https://raw.githubusercontent.com/\\1/\\2/\\3#')
+                RAW_URL="${RAW_URL}/SKILL.md"
+                FILENAME="SKILL.md"
+              else
+                RAW_URL=$(echo "$REPO_URL" | sed -E 's#https://github\.com/([^/]+/[^/]+)/blob/#https://raw.githubusercontent.com/\\1/#')
+                FILENAME=$(basename "$RAW_URL" | sed -E 's/\\?.*$//')
+                NAME_BASE=$(echo "$FILENAME" | sed -E 's/\\.[mM][dD]$//')
+              fi
 
               if [[ ! "$FILENAME" =~ [sS][kK][iI][lL][lL] ]]; then
                 echo "⏭️  Skipping markdown without 'skill' filename: $FILENAME"
@@ -526,7 +556,7 @@ jobs:
                 META_LOWER=$(echo "$META_TEXT" | tr '[:upper:]' '[:lower:]')
                 HAYSTACK="${NAME_LOWER} ${META_LOWER}"
 
-                if [[ "$ITEM_TYPE" == "markdown" ]]; then
+                if [[ "$ITEM_TYPE" == "markdown" || "$ITEM_TYPE" == "tree" ]]; then
                   HAYSTACK="${HAYSTACK} $(echo "$MARKDOWN_SNIPPET" | tr '[:upper:]' '[:lower:]')"
                 fi
 
@@ -553,7 +583,7 @@ jobs:
             REPO_NAME=$(basename "$REPO_URL")
             SKILL_PATH="skills/${DETECTED_CATEGORY}/${REPO_NAME}"
 
-            if [[ "$ITEM_TYPE" == "markdown" ]]; then
+            if [[ "$ITEM_TYPE" == "markdown" || "$ITEM_TYPE" == "tree" ]]; then
               SKILL_DIR="skills/${DETECTED_CATEGORY}/${NAME_BASE}"
               SKILL_FILE="${SKILL_DIR}/SKILL.md"
 
