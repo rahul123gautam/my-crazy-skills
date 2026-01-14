@@ -193,44 +193,62 @@ jobs:
 
           declare -a ADDED_SKILLS=()
 
+          # Determine category strategy based on trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger: use user-specified category
+            MANUAL_CATEGORY="${{ github.event.inputs.category || 'general' }}"
+            echo "🎯 Using manual category: $MANUAL_CATEGORY"
+            CATEGORY_STRATEGY="manual"
+          else
+            # Automatic trigger: use OpenCode AI detection
+            echo "🤖 Using OpenCode AI categorization"
+            CATEGORY_STRATEGY="ai-detected"
+          fi
+
           while IFS= read -r REPO_URL; do
             if grep -qF "$REPO_URL" /tmp/existing_submodules.txt 2>/dev/null; then
               echo "⏭️  Skipping existing submodule: $REPO_URL"
               continue
             fi
 
-            echo "🔍 Processing $REPO_URL with OpenCode analysis..."
+            echo "🔍 Processing $REPO_URL..."
 
-            # Use OpenCode Zen for intelligent categorization (no API key required)
-            DETECTED_CATEGORY="general"
-            if opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null; then
-              DETECTED_CATEGORY=$(opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null | jq -r '.category // "general"' || echo "general")
-              echo "✅ OpenCode Zen categorized as: $DETECTED_CATEGORY"
+            # Determine category based on strategy
+            if [[ "$CATEGORY_STRATEGY" == "manual" ]]; then
+              # Use manually specified category
+              DETECTED_CATEGORY="$MANUAL_CATEGORY"
+              echo "✅ Using manual category: $DETECTED_CATEGORY"
             else
-              echo "⚠️ OpenCode Zen CLI not available, using basic analysis"
-              REPO_NAME=$(basename "$REPO_URL")
-              NAME_LOWER=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')
-              
-              if [[ "$NAME_LOWER" =~ (frontend|ui|component|react|vue|angular|css) ]]; then
-                DETECTED_CATEGORY="frontend"
-              elif [[ "$NAME_LOWER" =~ (devops|ops|docker|k8s|infra) ]]; then
-                DETECTED_CATEGORY="devops"
-              elif [[ "$NAME_LOWER" =~ (research|analysis|doc|ml|ai|data) ]]; then
-                DETECTED_CATEGORY="research"
-              elif [[ "$NAME_LOWER" =~ (coding|dev|program|tool) ]]; then
-                DETECTED_CATEGORY="coding"
+              # Use OpenCode Zen for intelligent categorization (no API key required)
+              if opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null; then
+                DETECTED_CATEGORY=$(opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null | jq -r '.category // "general"' || echo "general")
+                echo "✅ OpenCode Zen categorized as: $DETECTED_CATEGORY"
               else
-                DETECTED_CATEGORY="general"
+                echo "⚠️ OpenCode Zen CLI not available, using basic analysis"
+                REPO_NAME=$(basename "$REPO_URL")
+                NAME_LOWER=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')
+                
+                if [[ "$NAME_LOWER" =~ (frontend|ui|component|react|vue|angular|css) ]]; then
+                  DETECTED_CATEGORY="frontend"
+                elif [[ "$NAME_LOWER" =~ (devops|ops|docker|k8s|infra) ]]; then
+                  DETECTED_CATEGORY="devops"
+                elif [[ "$NAME_LOWER" =~ (research|analysis|doc|ml|ai|data) ]]; then
+                  DETECTED_CATEGORY="research"
+                elif [[ "$NAME_LOWER" =~ (coding|dev|program|tool) ]]; then
+                  DETECTED_CATEGORY="coding"
+                else
+                  DETECTED_CATEGORY="general"
+                fi
               fi
             fi
 
             REPO_NAME=$(basename "$REPO_URL")
             SKILL_PATH="skills/${DETECTED_CATEGORY}/${REPO_NAME}"
 
-            echo "➕ Adding: $REPO_URL -> $SKILL_PATH"
+            echo "➕ Adding: $REPO_URL -> $SKILL_PATH (${CATEGORY_STRATEGY})"
 
             if git submodule add "$REPO_URL" "$SKILL_PATH" 2>&1; then
-              ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY)")
+              ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY) [$CATEGORY_STRATEGY])")
               echo "✅ Added: $REPO_URL"
             else
               echo "❌ Failed to add: $REPO_URL"
