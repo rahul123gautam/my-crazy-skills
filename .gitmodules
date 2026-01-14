@@ -1,3 +1,6 @@
 [submodule "skills/general/agent-skills"]
 	path = skills/general/agent-skills
 	url = https://github.com/vercel-labs/agent-skills
+[submodule "skills/general/marketplace"]
+	path = skills/general/marketplace
+	url = https://github.com/aiskillstore/marketplace
