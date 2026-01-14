@@ -99,10 +99,18 @@ jobs:
           echo "🔍 Searching with query: $QUERY"
 
           # Validate query is not malformed
-          if [[ -z "$SINCE_DATE" ]] || [[ "$QUERY" == *"created:>"*":"* ]]; then
-            echo "❌ Malformed query or missing date: $QUERY"
+          if [[ -z "$SINCE_DATE" ]]; then
+            echo "❌ Missing date in query: $QUERY"
             exit 1
           fi
+          
+          # Check if date format is valid (YYYY-MM-DD)
+          if ! [[ "$SINCE_DATE" =~ ^[0-9]{4}-[0-1][0-9]-[0-3][0-9]$ ]]; then
+            echo "❌ Invalid date format: $SINCE_DATE"
+            exit 1
+          fi
+          
+          echo "✅ Valid date format: $SINCE_DATE"
 
           RESPONSE=$(curl -s \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
