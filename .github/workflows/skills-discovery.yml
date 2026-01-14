@@ -1,4 +1,4 @@
-name: Auto-Add Trending Skills with OpenCode
+name: Skills Discovery with OpenCode Zen
 
 on:
   schedule:
@@ -201,13 +201,13 @@ jobs:
 
             echo "🔍 Processing $REPO_URL with OpenCode analysis..."
 
-            # Use OpenCode for intelligent categorization
+            # Use OpenCode Zen for intelligent categorization (no API key required)
             DETECTED_CATEGORY="general"
-            if opencode --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null; then
-              DETECTED_CATEGORY=$(opencode --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null | jq -r '.category // "general"' || echo "general")
-              echo "✅ OpenCode categorized as: $DETECTED_CATEGORY"
+            if opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null; then
+              DETECTED_CATEGORY=$(opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as: coding, frontend, research, devops, or general. Return just the category name." --format json 2>/dev/null | jq -r '.category // "general"' || echo "general")
+              echo "✅ OpenCode Zen categorized as: $DETECTED_CATEGORY"
             else
-              echo "⚠️ OpenCode CLI not available, using basic analysis"
+              echo "⚠️ OpenCode Zen CLI not available, using basic analysis"
               REPO_NAME=$(basename "$REPO_URL")
               NAME_LOWER=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')
               
