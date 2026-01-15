@@ -62,6 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p reports
+          reports_dir="$GITHUB_WORKSPACE/reports"
 
           targets=("$GITHUB_WORKSPACE")
           mapfile -t submodules < <(git submodule foreach --quiet --recursive 'echo $sm_path' 2>/dev/null || true)
@@ -77,14 +78,14 @@ jobs:
             if [[ -z "$name" ]]; then
               name="root"
             fi
-            out="reports/${name}.json"
-            raw="reports/${name}.events.jsonl"
+            out="${reports_dir}/${name}.json"
+            raw="${reports_dir}/${name}.events.jsonl"
 
             prompt="Scan this repository for malicious code patterns and risky dependencies. Return strict JSON only with this schema: {\"summary\":{\"target\":\"${name}\",\"issues_found\":<int>},\"findings\":[{\"severity\":\"low|medium|high|critical\",\"location\":\"...\",\"summary\":\"...\",\"evidence\":\"...\"}]}"
 
             if ! (cd "$target" && \
               OPENCODE_PERMISSION='{"*":"allow"}' \
-              opencode run --model zen --format json "$prompt" > "$raw"); then
+              opencode run --model opencode/zen --format json "$prompt" > "$raw"); then
               echo "OpenCode scan failed for $target"
               had_errors=1
               continue
