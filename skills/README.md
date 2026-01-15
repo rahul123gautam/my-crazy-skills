@@ -1,14 +1,17 @@
 # Skills Organization
 
-This directory contains AI skills organized by category. Each skill is added as a git submodule to ensure they stay up-to-date with their respective upstream repositories.
+This directory contains AI skills organized by category. Each skill is added as a git submodule to stay aligned with its upstream repository.
 
 ## Directory Structure
 
-- `coding/`: Skills related to software development, refactoring, and language-specific patterns.
-- `frontend/`: Skills for UI/UX engineering, CSS/styling, and component development.
-- `research/`: Skills for deep analysis, information gathering, and documentation reading.
-- `devops/`: Skills for CI/CD, deployment, and infrastructure management.
-- `general/`: General-purpose skills that don't fit into a specific category.
+- `learning/`: Learning resources and concept guides.
+- `frontend/`: UI/UX engineering, CSS/styling, and component development.
+- `creative/`: Creative tooling such as prompt generation.
+- `research/`: Research, analysis, and domain-specific investigation tools.
+- `tooling/`: Agent tooling, templates, and skill libraries.
+- `workflows/`: Structured workflows for planning and delivery.
+- `platforms/`: Skill registries and marketplaces.
+- `publishing/`: Writing and publishing automation.
 
 ## Adding a New Skill
 
