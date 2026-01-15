@@ -8,7 +8,7 @@ on:
       search_query:
         description: "Search query for skills repositories"
         required: false
-        default: "topic:ai-skill OR topic:skill"
+        default: "topic:ai-skills"
         type: string
   issues:
     types: [opened]
@@ -182,9 +182,9 @@ jobs:
       - name: Search for trending skills repositories
         id: search
         run: |
-          SEARCH_QUERY="${{ github.event.inputs.search_query || 'topic:ai-skill OR topic:skill' }}"
+          SEARCH_QUERY="${{ github.event.inputs.search_query || 'topic:ai-skills' }}"
           DAYS_AGO=30
-          MIN_STARS=10
+          MIN_STARS=600
 
           # Calculate date (Linux date command)
           SINCE_DATE=$(date -d "$DAYS_AGO days ago" +%Y-%m-%d 2>/dev/null || date -v-${DAYS_AGO}d +%Y-%m-%d)
