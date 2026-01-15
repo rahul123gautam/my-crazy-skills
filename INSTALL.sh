@@ -1,5 +1,8 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
+if [ -n "${BASH_VERSION:-}" ]; then
+  set -o pipefail
+fi
 
 usage() {
   cat <<'EOF'
@@ -21,14 +24,32 @@ Notes:
 EOF
 }
 
-root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir=""
+if [ -n "${BASH_SOURCE:-}" ]; then
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+elif [ -f "$0" ]; then
+  case "$0" in
+    */*)
+      script_dir=$(cd "$(dirname "$0")" && pwd -P)
+      ;;
+  esac
+fi
+
+if [ -n "${script_dir}" ] && [ -d "${script_dir}/skills" ]; then
+  root_dir="${script_dir}"
+elif [ -d "./skills" ]; then
+  root_dir="$(pwd -P)"
+else
+  root_dir=""
+fi
+
 source_skills="${root_dir}/skills"
 
 mode="global"
 target="codex"
 project_path=""
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
     --global)
       mode="global"
@@ -45,7 +66,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --codex|--claude|--gemini|--opencode)
       new_target="${1#--}"
-      if [[ "${target}" != "codex" && "${target}" != "${new_target}" ]]; then
+      if [ "${target}" != "codex" ] && [ "${target}" != "${new_target}" ]; then
         echo "Error: only one target can be specified." >&2
         exit 1
       fi
@@ -64,13 +85,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -d "${source_skills}" ]]; then
+if [ ! -d "${source_skills}" ]; then
   echo "Error: skills directory not found at ${source_skills}" >&2
+  echo "Run this from the repo root (where ./skills exists) or clone the repo first." >&2
   exit 1
 fi
 
-if [[ "${mode}" == "project" ]]; then
-  if [[ ! -d "${project_path}" ]]; then
+if [ "${mode}" = "project" ]; then
+  if [ ! -d "${project_path}" ]; then
     echo "Error: project path not found: ${project_path}" >&2
     exit 1
   fi
@@ -99,7 +121,7 @@ case "${target}" in
     ;;
 esac
 
-if [[ "${mode}" == "project" ]]; then
+if [ "${mode}" = "project" ]; then
   dest_dir="${project_path}/${base_dir_project}"
 else
   dest_dir="${base_dir_global}"
@@ -109,14 +131,14 @@ dest_skills="${dest_dir}/skills"
 
 mkdir -p "${dest_dir}"
 
-if [[ -L "${dest_skills}" ]]; then
+if [ -L "${dest_skills}" ]; then
   current_target="$(readlink "${dest_skills}")"
-  if [[ "${current_target}" == "${source_skills}" ]]; then
+  if [ "${current_target}" = "${source_skills}" ]; then
     echo "Already linked: ${dest_skills} -> ${source_skills}"
     exit 0
   fi
   rm "${dest_skills}"
-elif [[ -e "${dest_skills}" ]]; then
+elif [ -e "${dest_skills}" ]; then
   ts="$(date +%Y%m%d%H%M%S)"
   backup="${dest_skills}.bak.${ts}"
   mv "${dest_skills}" "${backup}"
