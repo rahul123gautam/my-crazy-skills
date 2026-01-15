@@ -113,14 +113,31 @@ jobs:
           # Extract GitHub repo URLs
           echo -e "$ISSUE_TEXT" | grep -oE 'https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' > /tmp/repos_urls.txt || true
 
+          # Extract GitHub markdown file URLs containing "skill" in the filename
+          echo -e "$ISSUE_TEXT" | grep -oiE 'https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+/blob/[^ )]+skill[^ )]*\.md' > /tmp/markdown_urls.txt || true
+
+          # Avoid adding repo URLs that are only referenced via markdown file links
+          if [[ -s /tmp/markdown_urls.txt && -s /tmp/repos_urls.txt ]]; then
+            sed -E 's#(https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+).*#\\1#' /tmp/markdown_urls.txt | sort -u > /tmp/markdown_repos.txt
+            grep -vFf /tmp/markdown_repos.txt /tmp/repos_urls.txt > /tmp/repos_urls.filtered || true
+            mv /tmp/repos_urls.filtered /tmp/repos_urls.txt
+          fi
+
           # Extract owner/repo shorthand and normalize into URLs
           echo -e "$ISSUE_TEXT" | grep -oE '\b[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+\b' | grep -vE '^https?://' > /tmp/repos_slugs.txt || true
           if [[ -s /tmp/repos_slugs.txt ]]; then
             awk '{print "https://github.com/" $0}' /tmp/repos_slugs.txt >> /tmp/repos_urls.txt
           fi
 
-          if [[ -s /tmp/repos_urls.txt ]]; then
-            sed -E 's#\\.git$##; s#/$##' /tmp/repos_urls.txt | sort -u > /tmp/repos.txt
+          if [[ -s /tmp/repos_urls.txt || -s /tmp/markdown_urls.txt ]]; then
+            : > /tmp/repos.txt
+            if [[ -s /tmp/markdown_urls.txt ]]; then
+              sed -E 's#\\.git$##; s#/$##' /tmp/markdown_urls.txt | sort -u | sed 's#^#markdown::#' >> /tmp/repos.txt
+            fi
+            if [[ -s /tmp/repos_urls.txt ]]; then
+              sed -E 's#\\.git$##; s#/$##' /tmp/repos_urls.txt | sort -u | sed 's#^#repo::#' >> /tmp/repos.txt
+            fi
+            sort -u /tmp/repos.txt -o /tmp/repos.txt
           else
             : > /tmp/repos.txt
           fi
@@ -148,6 +165,7 @@ jobs:
               \`\`\`
               https://github.com/owner/repo
               owner/repo
+              https://github.com/owner/repo/blob/main/path/skill.md
               \`\`\`
               
               Your issue body was:
@@ -336,7 +354,7 @@ jobs:
             echo "$REPOS_JSON" | jq -r '.[]' > /tmp/repos_to_add.txt
           else
             # From trending - extract .url field
-            echo "$REPOS_JSON" | jq -r '.[].url' > /tmp/repos_to_add.txt
+            echo "$REPOS_JSON" | jq -r '.[].url | "repo::" + .' > /tmp/repos_to_add.txt
           fi
 
           TOTAL=$(wc -l < /tmp/repos_to_add.txt | tr -d ' ')
@@ -383,31 +401,79 @@ jobs:
           echo "🤖 Using OpenCode AI categorization for all skills"
           echo "Allowed categories: learning, frontend, creative, research, tooling, workflows, platforms, publishing"
 
-          while IFS= read -r REPO_URL; do
-            if grep -qF "$REPO_URL" /tmp/existing_submodules.txt 2>/dev/null; then
-              echo "⏭️  Skipping existing submodule: $REPO_URL"
-              SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
-              continue
+          while IFS= read -r ITEM; do
+            ITEM_TYPE="repo"
+            REPO_URL="$ITEM"
+
+            if [[ "$ITEM" == markdown::* ]]; then
+              ITEM_TYPE="markdown"
+              REPO_URL="${ITEM#markdown::}"
+            elif [[ "$ITEM" == repo::* ]]; then
+              ITEM_TYPE="repo"
+              REPO_URL="${ITEM#repo::}"
+            elif [[ "$ITEM" =~ /blob/ && "$ITEM" =~ \.md$ ]]; then
+              ITEM_TYPE="markdown"
+              REPO_URL="$ITEM"
+            fi
+
+            if [[ "$ITEM_TYPE" == "repo" ]]; then
+              if grep -qF "$REPO_URL" /tmp/existing_submodules.txt 2>/dev/null; then
+                echo "⏭️  Skipping existing submodule: $REPO_URL"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                continue
+              fi
             fi
 
             echo "🔍 Processing $REPO_URL..."
+
+            MARKDOWN_CONTENT=""
+            MARKDOWN_SNIPPET=""
+            NAME_BASE=""
+            RAW_URL=""
+            FILENAME=""
+
+            if [[ "$ITEM_TYPE" == "markdown" ]]; then
+              RAW_URL=$(echo "$REPO_URL" | sed -E 's#https://github\.com/([^/]+/[^/]+)/blob/#https://raw.githubusercontent.com/\\1/#')
+              FILENAME=$(basename "$RAW_URL" | sed -E 's/\\?.*$//')
+              NAME_BASE=$(echo "$FILENAME" | sed -E 's/\\.[mM][dD]$//')
+
+              if [[ ! "$FILENAME" =~ [sS][kK][iI][lL][lL] ]]; then
+                echo "⏭️  Skipping markdown without 'skill' filename: $FILENAME"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                continue
+              fi
+
+              MARKDOWN_CONTENT=$(curl -fsSL "$RAW_URL" 2>/dev/null || true)
+              if [[ -z "$MARKDOWN_CONTENT" ]]; then
+                echo "❌ Failed to fetch markdown: $RAW_URL"
+                FAILED_COUNT=$((FAILED_COUNT + 1))
+                continue
+              fi
+
+              MARKDOWN_SNIPPET=$(echo "$MARKDOWN_CONTENT" | head -n 200)
+            fi
 
             if [[ -n "$CATEGORY_OVERRIDE" ]]; then
               DETECTED_CATEGORY="$CATEGORY_OVERRIDE"
               echo "✅ Using category override: $DETECTED_CATEGORY"
             else
-              # Fetch repo metadata for smarter fallback categorization
-              REPO_PATH=$(echo "$REPO_URL" | sed -E 's#https://github\.com/##')
-              META_JSON=$(gh api "repos/${REPO_PATH}" --jq '{name:.name,description:.description,topics:.topics}' 2>/dev/null || true)
               META_TEXT=""
-              if [[ -n "$META_JSON" ]]; then
-                META_TEXT=$(echo "$META_JSON" | jq -r '.name + " " + (.description // "") + " " + ((.topics // []) | join(" "))' || echo "")
-              fi
+              if [[ "$ITEM_TYPE" == "repo" ]]; then
+                # Fetch repo metadata for smarter fallback categorization
+                REPO_PATH=$(echo "$REPO_URL" | sed -E 's#https://github\.com/##')
+                META_JSON=$(gh api "repos/${REPO_PATH}" --jq '{name:.name,description:.description,topics:.topics}' 2>/dev/null || true)
+                if [[ -n "$META_JSON" ]]; then
+                  META_TEXT=$(echo "$META_JSON" | jq -r '.name + " " + (.description // "") + " " + ((.topics // []) | join(" "))' || echo "")
+                fi
 
-              # Use OpenCode Zen for intelligent categorization (no API key required)
-              OPENCODE_OUTPUT=$(opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as one of: learning, frontend, creative, research, tooling, workflows, platforms, publishing. Return JSON: {\"category\":\"...\",\"confidence\":\"low|medium|high\",\"rationale\":\"...\"}." --format json 2>/dev/null || true)
+                # Use OpenCode Zen for intelligent categorization (no API key required)
+                OPENCODE_OUTPUT=$(opencode --model zen --repo "$REPO_URL" --prompt "Analyze this repository and categorize as one of: learning, frontend, creative, research, tooling, workflows, platforms, publishing. Return JSON: {\"category\":\"...\",\"confidence\":\"low|medium|high\",\"rationale\":\"...\"}." --format json 2>/dev/null || true)
+              else
+                # Markdown skill file - use file content
+                OPENCODE_OUTPUT=$(opencode --model zen --prompt "Categorize this skill markdown as one of: learning, frontend, creative, research, tooling, workflows, platforms, publishing. Return JSON: {\"category\":\"...\",\"confidence\":\"low|medium|high\",\"rationale\":\"...\"}.\n\nContent:\n${MARKDOWN_SNIPPET}" --format json 2>/dev/null || true)
+              fi
               
-              if [[ -n "$OPENCODE_OUTPUT" ]] && echo "$OPENCODE_OUTPUT" | jq empty >/dev/null 2>&1; then
+              if [[ -n "${OPENCODE_OUTPUT:-}" ]] && echo "$OPENCODE_OUTPUT" | jq empty >/dev/null 2>&1; then
                 DETECTED_CATEGORY=$(echo "$OPENCODE_OUTPUT" | jq -r '.category // "tooling"' || echo "tooling")
                 echo "✅ OpenCode Zen categorized as: $DETECTED_CATEGORY"
               else
@@ -416,6 +482,10 @@ jobs:
                 NAME_LOWER=$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')
                 META_LOWER=$(echo "$META_TEXT" | tr '[:upper:]' '[:lower:]')
                 HAYSTACK="${NAME_LOWER} ${META_LOWER}"
+
+                if [[ "$ITEM_TYPE" == "markdown" ]]; then
+                  HAYSTACK="${HAYSTACK} $(echo "$MARKDOWN_SNIPPET" | tr '[:upper:]' '[:lower:]')"
+                fi
 
                 if [[ "$HAYSTACK" =~ (course|concepts|tutorial|guide|learn|handbook|cheatsheet|curriculum) ]]; then
                   DETECTED_CATEGORY="learning"
@@ -440,14 +510,30 @@ jobs:
             REPO_NAME=$(basename "$REPO_URL")
             SKILL_PATH="skills/${DETECTED_CATEGORY}/${REPO_NAME}"
 
-            echo "➕ Adding: $REPO_URL -> $SKILL_PATH (ai-categorized)"
+            if [[ "$ITEM_TYPE" == "markdown" ]]; then
+              SKILL_DIR="skills/${DETECTED_CATEGORY}/${NAME_BASE}"
+              SKILL_FILE="${SKILL_DIR}/SKILL.md"
 
-            if git submodule add "$REPO_URL" "$SKILL_PATH" 2>&1; then
-              ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY)")
-              echo "✅ Added: $REPO_URL"
+              if [[ -f "$SKILL_FILE" ]]; then
+                echo "⏭️  Skill already exists: $SKILL_FILE"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                continue
+              fi
+
+              mkdir -p "$SKILL_DIR"
+              printf '%s\n' "$MARKDOWN_CONTENT" > "$SKILL_FILE"
+              ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY) [markdown]")
+              echo "✅ Added markdown skill: $SKILL_FILE"
             else
-              echo "❌ Failed to add: $REPO_URL"
-              FAILED_COUNT=$((FAILED_COUNT + 1))
+              echo "➕ Adding: $REPO_URL -> $SKILL_PATH (ai-categorized)"
+
+              if git submodule add "$REPO_URL" "$SKILL_PATH" 2>&1; then
+                ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY)")
+                echo "✅ Added: $REPO_URL"
+              else
+                echo "❌ Failed to add: $REPO_URL"
+                FAILED_COUNT=$((FAILED_COUNT + 1))
+              fi
             fi
           done < /tmp/repos_to_add.txt
 
