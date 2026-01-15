@@ -64,7 +64,7 @@ jobs:
           mkdir -p reports
 
           targets=("$GITHUB_WORKSPACE")
-          mapfile -t submodules < <(git submodule foreach --recursive 'echo $sm_path' 2>/dev/null || true)
+          mapfile -t submodules < <(git submodule foreach --quiet --recursive 'echo $sm_path' 2>/dev/null || true)
           for sm in "${submodules[@]}"; do
             targets+=("$GITHUB_WORKSPACE/$sm")
           done
@@ -78,15 +78,19 @@ jobs:
               name="root"
             fi
             out="reports/${name}.json"
+            raw="reports/${name}.events.jsonl"
 
             prompt="Scan this repository for malicious code patterns and risky dependencies. Return strict JSON only with this schema: {\"summary\":{\"target\":\"${name}\",\"issues_found\":<int>},\"findings\":[{\"severity\":\"low|medium|high|critical\",\"location\":\"...\",\"summary\":\"...\",\"evidence\":\"...\"}]}"
 
-            if ! opencode --model zen --repo "$target" --prompt "$prompt" --format json > "$out"; then
+            if ! (cd "$target" && \
+              OPENCODE_PERMISSION='{"*":"allow"}' \
+              opencode run --model zen --format json "$prompt" > "$raw"); then
               echo "OpenCode scan failed for $target"
               had_errors=1
               continue
             fi
 
+            jq -r 'select(.type=="text") | .part.text' "$raw" | tail -n 1 > "$out"
             if ! jq -e '.summary and (.findings | type=="array")' "$out" >/dev/null; then
               echo "Invalid JSON schema for $target"
               had_errors=1
