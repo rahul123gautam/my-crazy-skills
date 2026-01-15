@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   opencode-security-scan:
@@ -59,6 +60,7 @@ jobs:
           fi
 
       - name: Run OpenCode Zen security scan
+        id: scan
         run: |
           set -euo pipefail
           mkdir -p reports
@@ -72,6 +74,10 @@ jobs:
 
           has_issues=0
           had_errors=0
+          total_critical=0
+          total_high=0
+          total_medium=0
+          total_low=0
 
           for target in "${targets[@]}"; do
             name=$(echo "$target" | sed "s#^$GITHUB_WORKSPACE/?##; s#[/ ]#-#g; s#^-##")
@@ -83,19 +89,20 @@ jobs:
 
             prompt="Scan this repository for malicious code patterns and risky dependencies. Return strict JSON only with this schema: {\"summary\":{\"target\":\"${name}\",\"issues_found\":<int>},\"findings\":[{\"severity\":\"low|medium|high|critical\",\"location\":\"...\",\"summary\":\"...\",\"evidence\":\"...\"}]}"
 
+            echo "Scanning $target..."
             if ! (cd "$target" && \
               OPENCODE_PERMISSION='{"*":"allow"}' \
               OPENCODE_DISABLE_MODELS_FETCH=true \
               OPENCODE_ENABLE_EXPERIMENTAL_MODELS=true \
-              opencode run --model opencode/zen --format json "$prompt" > "$raw"); then
-              echo "OpenCode scan failed for $target"
+              opencode run --model opencode/big-pickle --format json "$prompt" > "$raw"); then
+              echo "::error::OpenCode scan failed for $target"
               had_errors=1
               continue
             fi
 
             jq -r 'select(.type=="text") | .part.text' "$raw" | tail -n 1 > "$out"
             if ! jq -e '.summary and (.findings | type=="array")' "$out" >/dev/null; then
-              echo "Invalid JSON schema for $target"
+              echo "::error::Invalid JSON schema for $target"
               had_errors=1
               continue
             fi
@@ -103,6 +110,19 @@ jobs:
             issues=$(jq -r '.summary.issues_found // (.findings | length)' "$out")
             if [[ "$issues" != "0" ]]; then
               has_issues=1
+              critical=$(jq '[.findings[] | select(.severity=="critical")] | length' "$out")
+              high=$(jq '[.findings[] | select(.severity=="high")] | length' "$out")
+              medium=$(jq '[.findings[] | select(.severity=="medium")] | length' "$out")
+              low=$(jq '[.findings[] | select(.severity=="low")] | length' "$out")
+
+              total_critical=$((total_critical + critical))
+              total_high=$((total_high + high))
+              total_medium=$((total_medium + medium))
+              total_low=$((total_low + low))
+
+              echo "::warning::Found $issues security issues in $target (Critical: $critical, High: $high, Medium: $medium, Low: $low)"
+            else
+              echo "✅ No security issues found in $target"
             fi
           done
 
@@ -113,14 +133,46 @@ jobs:
               > reports/opencode-security.json
           fi
 
+          echo "critical=$total_critical" >> "$GITHUB_OUTPUT"
+          echo "high=$total_high" >> "$GITHUB_OUTPUT"
+          echo "medium=$total_medium" >> "$GITHUB_OUTPUT"
+          echo "low=$total_low" >> "$GITHUB_OUTPUT"
+          echo "has_issues=$has_issues" >> "$GITHUB_OUTPUT"
+
           if [[ "$had_errors" -ne 0 ]]; then
-            echo "One or more scans failed"
+            echo "::error::One or more scans failed"
             exit 1
           fi
 
           if [[ "$has_issues" -ne 0 ]]; then
-            echo "Security findings detected"
+            echo "::error::Security findings detected"
             exit 1
+          fi
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## 🔒 OpenCode Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ -f reports/opencode-security.json ]]; then
+            total_findings=$(jq '[.results[].findings[]] | length' reports/opencode-security.json)
+            
+            if [[ "$total_findings" -eq 0 ]]; then
+              echo "✅ **No security issues found!**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ **Found $total_findings security finding(s)**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Severity Breakdown" >> $GITHUB_STEP_SUMMARY
+              echo "- 🔴 Critical: ${{ steps.scan.outputs.critical }}" >> $GITHUB_STEP_SUMMARY
+              echo "- 🟠 High: ${{ steps.scan.outputs.high }}" >> $GITHUB_STEP_SUMMARY
+              echo "- 🟡 Medium: ${{ steps.scan.outputs.medium }}" >> $GITHUB_STEP_SUMMARY
+              echo "- 🔵 Low: ${{ steps.scan.outputs.low }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "📊 Download the detailed report from the artifacts section below." >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "❌ Scan failed to generate reports" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Upload OpenCode security reports
@@ -129,3 +181,4 @@ jobs:
         with:
           name: opencode-security-reports
           path: reports
+          retention-days: 30
