@@ -40,3 +40,6 @@
 [submodule "skills/general/skill-prompt-generator"]
 	path = skills/general/skill-prompt-generator
 	url = https://github.com/huangserva/skill-prompt-generator
+[submodule "skills/general/claude-skills"]
+	path = skills/general/claude-skills
+	url = https://github.com/alirezarezvani/claude-skills
