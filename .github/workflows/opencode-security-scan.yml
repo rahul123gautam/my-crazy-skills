@@ -101,48 +101,43 @@ jobs:
               had_errors=1
               continue
             fi
-
             python3 - <<PY
-import json
-import re
-from pathlib import Path
-
-raw_path = Path(r"$raw")
-out_path = Path(r"$out")
-texts = []
-for line in raw_path.read_text().splitlines():
-    try:
-        obj = json.loads(line)
-    except json.JSONDecodeError:
-        continue
-    if obj.get("type") == "text":
-        text = (obj.get("part") or {}).get("text") or ""
-        if text:
-            texts.append(text)
-
-def extract_json(text):
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"(\\{.*?\\}|\\[.*?\\])", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            return None
-    return None
-
-data = None
-for text in texts:
-    data = extract_json(text)
-    if data is not None:
-        break
-
-if data is None:
-    raise SystemExit("No JSON object found in OpenCode output")
-out_path.write_text(json.dumps(data))
-PY
+            import json
+            import re
+            from pathlib import Path
+            raw_path = Path(r"$raw")
+            out_path = Path(r"$out")
+            texts = []
+            for line in raw_path.read_text().splitlines():
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") == "text":
+                    text = (obj.get("part") or {}).get("text") or ""
+                    if text:
+                        texts.append(text)
+            def extract_json(text):
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    pass
+                match = re.search(r"(\\{.*?\\}|\\[.*?\\])", text, re.DOTALL)
+                if match:
+                    try:
+                        return json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        return None
+                return None
+            data = None
+            for text in texts:
+                data = extract_json(text)
+                if data is not None:
+                    break
+            if data is None:
+                raise SystemExit("No JSON object found in OpenCode output")
+            out_path.write_text(json.dumps(data))
+            PY
             if ! jq -e '.summary.target and (.findings | type=="array") and all(.findings[]; .severity and (.severity|IN("low","medium","high","critical")) and .location and .summary)' "$out" >/dev/null; then
               echo "::error::Invalid JSON schema for $target"
               had_errors=1
