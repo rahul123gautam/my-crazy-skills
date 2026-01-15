@@ -9,7 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/Keith-CY/my-crazy-skills/main/INSTA
 ```
 
 Notes:
-- Run from the repo root (where `skills/` exists) when using `curl | sh`.
+- `curl | sh` auto-clones to `~/.cache/my-crazy-skills` if no local `skills/` is found.
 - Target other agents:
   - Claude:
     ```bash

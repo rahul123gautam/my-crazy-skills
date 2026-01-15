@@ -86,9 +86,26 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ! -d "${source_skills}" ]; then
-  echo "Error: skills directory not found at ${source_skills}" >&2
-  echo "Run this from the repo root (where ./skills exists) or clone the repo first." >&2
-  exit 1
+  repo_url="https://github.com/Keith-CY/my-crazy-skills"
+  cache_dir="${HOME}/.cache/my-crazy-skills"
+  if command -v git >/dev/null 2>&1; then
+    if [ -d "${cache_dir}/skills" ]; then
+      echo "Using cached repo at ${cache_dir}"
+    elif [ -e "${cache_dir}" ] && [ ! -d "${cache_dir}/.git" ]; then
+      echo "Error: ${cache_dir} exists but is not a git repo." >&2
+      echo "Move it aside or remove it, then re-run the installer." >&2
+      exit 1
+    else
+      mkdir -p "${HOME}/.cache"
+      echo "Cloning ${repo_url} into ${cache_dir}"
+      git clone --recurse-submodules "${repo_url}" "${cache_dir}"
+    fi
+    source_skills="${cache_dir}/skills"
+  else
+    echo "Error: skills directory not found and git is not installed." >&2
+    echo "Install git or clone the repo and run from its root." >&2
+    exit 1
+  fi
 fi
 
 if [ "${mode}" = "project" ]; then
