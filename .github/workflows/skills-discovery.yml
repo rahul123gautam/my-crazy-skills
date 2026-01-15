@@ -29,13 +29,39 @@ jobs:
     outputs:
       repo_urls: ${{ steps.extract.outputs.repo_urls }}
       should_continue: ${{ steps.extract.outputs.should_continue }}
+      permission_ok: ${{ steps.permission.outputs.permission_ok }}
+      category_override: ${{ steps.extract.outputs.category_override }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check issue author permissions
+        id: permission
+        run: |
+          set -euo pipefail
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          AUTHOR="${{ github.event.issue.user.login }}"
+
+          PERM=$(gh api "repos/${{ github.repository }}/collaborators/${AUTHOR}/permission" --jq '.permission' 2>/dev/null || echo "none")
+
+          case "$PERM" in
+            admin|maintain|write)
+              echo "permission_ok=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "permission_ok=false" >> $GITHUB_OUTPUT
+              gh issue comment "$ISSUE_NUMBER" \
+                --body "⚠️ This automation only accepts requests from users with **write** access (or higher). Please ask a maintainer to submit the request."
+              gh issue close "$ISSUE_NUMBER"
+              ;;
+          esac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create labels if they don't exist
+        if: steps.permission.outputs.permission_ok == 'true'
         run: |
           # Create all labels needed by the workflow (ignore errors if they already exist)
           gh label create "automation-processing" --color "FBCA04" --description "Being processed by automation" 2>/dev/null || true
@@ -50,6 +76,7 @@ jobs:
 
       - name: Parse issue for repo URLs
         id: extract
+        if: steps.permission.outputs.permission_ok == 'true'
         run: |
           set -euo pipefail
           ISSUE_NUMBER="${{ github.event.issue.number }}"
@@ -139,7 +166,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add processing label
-        if: steps.extract.outputs.should_continue == 'true'
+        if: steps.permission.outputs.permission_ok == 'true' && steps.extract.outputs.should_continue == 'true'
         run: |
           gh issue edit "${{ github.event.issue.number }}" \
             --add-label "automation-processing"
@@ -451,7 +478,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update issue with status
-        if: github.event_name == 'issues' && steps.add.outputs.has_changes == 'true'
+        if: github.event_name == 'issues' && needs.parse-issue.outputs.permission_ok == 'true' && steps.add.outputs.has_changes == 'true'
         run: |
           ADDED_COUNT=$(echo '${{ steps.add.outputs.added_skills }}' | jq 'length')
           BRANCH="${{ steps.add.outputs.pr_branch }}"
@@ -471,7 +498,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Handle no changes
-        if: steps.add.outputs.has_changes == 'false'
+        if: github.event_name == 'issues' && needs.parse-issue.outputs.permission_ok == 'true' && steps.add.outputs.has_changes == 'false'
         run: |
           if [[ "${{ github.event_name }}" == "issues" ]]; then
             gh issue comment "${{ github.event.issue.number }}" \
@@ -485,6 +512,7 @@ jobs:
             gh issue edit "${{ github.event.issue.number }}" \
               --remove-label "automation-processing" \
               --add-label "automation-complete"
+            gh issue close "${{ github.event.issue.number }}"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -556,7 +584,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update issue with PR link
-        if: github.event_name == 'issues'
+        if: github.event_name == 'issues' && needs.parse-issue.outputs.permission_ok == 'true'
         run: |
           PR_NUMBER=$(gh pr list \
             --head "${{ needs.process-skills-with-opencode.outputs.pr_branch }}" \
@@ -581,17 +609,18 @@ jobs:
             gh issue edit "${{ github.event.issue.number }}" \
               --remove-label "automation-processing" \
               --add-label "automation-complete,pr-created"
+            gh issue close "${{ github.event.issue.number }}"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   handle-failure:
-    needs: [process-skills-with-opencode, create-pr]
+    needs: [parse-issue, process-skills-with-opencode, create-pr]
     if: failure()
     runs-on: ubuntu-latest
     steps:
       - name: Notify failure
-        if: github.event_name == 'issues'
+        if: github.event_name == 'issues' && needs.parse-issue.outputs.permission_ok == 'true'
         run: |
           gh issue comment "${{ github.event.issue.number }}" \
             --body "## ❌ Automation Failed
