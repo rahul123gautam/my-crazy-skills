@@ -338,9 +338,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +e
           curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+          install_exit=$?
+          set -e
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
-          command -v opencode
+          if ! command -v opencode >/dev/null 2>&1; then
+            echo "OpenCode binary not found after install"
+            exit 1
+          fi
+          if [[ "$install_exit" -ne 0 ]]; then
+            echo "OpenCode install exited non-zero ($install_exit) but binary is present; continuing"
+          fi
 
       - name: Determine repository URLs to process
         id: repos
