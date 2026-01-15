@@ -342,6 +342,7 @@ jobs:
           curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
           install_exit=$?
           set -e
+          export PATH="$HOME/.opencode/bin:$PATH"
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           if ! command -v opencode >/dev/null 2>&1; then
             echo "OpenCode binary not found after install"
