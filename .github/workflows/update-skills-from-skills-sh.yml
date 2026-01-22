@@ -1,8 +1,10 @@
 name: Sync Popular Skills from skills.sh
 
+
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *"→ Runs at 03:00
+
   workflow_dispatch:
     inputs:
       view:
@@ -29,8 +31,10 @@ on:
         default: "skills/popular"
         type: string
 
+
 permissions:
   contents: write
+
 
 jobs:
   sync:
@@ -42,15 +46,18 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
+
       - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
 
       - name: Sync popular skills sources (as submodules)
         env:
@@ -62,10 +69,14 @@ jobs:
           bash scripts/sync-skills-from-skills-sh.sh
           git submodule update --init --recursive
 
+
       - name: Check for changes
         id: git-check
         run: |
-          git diff --quiet . || echo "changed=true" >> $GITHUB_OUTPUT
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
@@ -73,4 +84,5 @@ jobs:
           git add .gitmodules "${{ github.event.inputs.dest_dir || 'skills/popular' }}"
           git commit -m "chore: sync popular skills from skills.sh"
           git push
+
 
