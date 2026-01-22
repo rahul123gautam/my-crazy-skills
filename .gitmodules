@@ -61,3 +61,27 @@
 [submodule "skills/general/mcp-progressive-agentskill"]
 	path = skills/general/mcp-progressive-agentskill
 	url = https://github.com/cablate/mcp-progressive-agentskill
+[submodule "skills/popular/vercel-labs--agent-skills"]
+	path = skills/popular/vercel-labs--agent-skills
+	url = https://github.com/vercel-labs/agent-skills.git
+[submodule "skills/popular/remotion-dev--skills"]
+	path = skills/popular/remotion-dev--skills
+	url = https://github.com/remotion-dev/skills.git
+[submodule "skills/popular/anthropics--skills"]
+	path = skills/popular/anthropics--skills
+	url = https://github.com/anthropics/skills.git
+[submodule "skills/popular/expo--skills"]
+	path = skills/popular/expo--skills
+	url = https://github.com/expo/skills.git
+[submodule "skills/popular/better-auth--skills"]
+	path = skills/popular/better-auth--skills
+	url = https://github.com/better-auth/skills.git
+[submodule "skills/popular/vercel-labs--agent-browser"]
+	path = skills/popular/vercel-labs--agent-browser
+	url = https://github.com/vercel-labs/agent-browser.git
+[submodule "skills/popular/callstackincubator--agent-skills"]
+	path = skills/popular/callstackincubator--agent-skills
+	url = https://github.com/callstackincubator/agent-skills.git
+[submodule "skills/popular/coreyhaines31--marketingskills"]
+	path = skills/popular/coreyhaines31--marketingskills
+	url = https://github.com/coreyhaines31/marketingskills.git
