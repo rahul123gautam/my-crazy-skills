@@ -635,7 +635,12 @@ jobs:
               fi
             fi
 
-            REPO_SLUG="$(echo "$REPO_URL_NORM" | sed -E 's#^https://github\\.com/##')"
+            REPO_SLUG="${REPO_URL_NORM#https://github.com/}"
+            if [[ "$REPO_SLUG" == "$REPO_URL_NORM" || ! "$REPO_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
+              echo "❌ Invalid repo slug for submodule: $REPO_URL_NORM"
+              FAILED_COUNT=$((FAILED_COUNT + 1))
+              continue
+            fi
             REPO_OWNER="${REPO_SLUG%%/*}"
             REPO_NAME="${REPO_SLUG##*/}"
             REPO_DIR="${REPO_OWNER}--${REPO_NAME}"
@@ -656,7 +661,7 @@ jobs:
               ADDED_SKILLS+=("$REPO_URL ($DETECTED_CATEGORY) [markdown]")
               echo "✅ Added markdown skill: $SKILL_FILE"
             else
-              if grep -qF "$SKILL_PATH" /tmp/existing_submodule_paths.txt 2>/dev/null; then
+              if grep -Fxq "$SKILL_PATH" /tmp/existing_submodule_paths.txt 2>/dev/null; then
                 EXISTING_URL=$(awk -v p="$SKILL_PATH" '$1==p {print $2; exit}' /tmp/existing_submodule_path_url.txt 2>/dev/null || true)
                 if [[ -n "$EXISTING_URL" && "$EXISTING_URL" == "$REPO_URL_NORM" ]]; then
                   EXISTING_GITLINK=$(git ls-tree HEAD -- "$SKILL_PATH" | awk '{print $3}' | head -n1 || true)
