@@ -602,7 +602,16 @@ jobs:
               fi
               
               if [[ -n "${OPENCODE_OUTPUT:-}" ]] && echo "$OPENCODE_OUTPUT" | jq empty >/dev/null 2>&1; then
-                DETECTED_CATEGORY=$(echo "$OPENCODE_OUTPUT" | jq -r '.category // "tooling"' || echo "tooling")
+                DETECTED_CATEGORY=$(
+                  echo "$OPENCODE_OUTPUT" \
+                    | jq -r '.category // "tooling"' 2>/dev/null \
+                    | head -n1
+                )
+                DETECTED_CATEGORY="${DETECTED_CATEGORY//$'\r'/}"
+                DETECTED_CATEGORY="${DETECTED_CATEGORY//[[:space:]]/}"
+                if [[ -z "$DETECTED_CATEGORY" ]]; then
+                  DETECTED_CATEGORY="tooling"
+                fi
                 echo "✅ OpenCode categorized as: $DETECTED_CATEGORY"
               else
                 echo "⚠️ OpenCode CLI unavailable or failed, using smart metadata analysis"
